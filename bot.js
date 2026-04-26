@@ -1,6 +1,6 @@
 'use strict';
 
-const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits } = require('discord.js');
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const TARGET_USER_ID = process.env.USER_ID;
@@ -23,66 +23,10 @@ const client = new Client({
   ],
 });
 
-/** Reset the bot's presence to the default idle-watching state. */
-function setDefaultPresence() {
-  client.user.setPresence({
-    status: 'online',
-    activities: [
-      {
-        name: 'for activity changes',
-        type: ActivityType.Watching,
-      },
-    ],
-  });
-}
-
-/**
- * Extract the first Spotify or generic music (Listening) activity from a list.
- * Returns null if none is found.
- */
-function findMusicActivity(activities) {
-  return (
-    activities.find(
-      (a) => a.name === 'Spotify' || a.type === ActivityType.Listening
-    ) ?? null
-  );
-}
-
-/**
- * Update the bot's presence to mirror a music activity.
- * Falls back gracefully when details or state are absent.
- */
-function setMusicPresence(activity) {
-  const song = activity.details || activity.name;
-  const artist = activity.state
-    ? activity.state.replace(/^by\s+/i, '')
-    : null;
-  const album = activity.assets?.largeText || null;
-
-  // Build a human-readable status label shown under the activity name
-  const statusParts = [song];
-  if (artist) statusParts.push(`by ${artist}`);
-  if (album) statusParts.push(`(${album})`);
-
-  const label = statusParts.join(' ');
-
-  client.user.setPresence({
-    status: 'online',
-    activities: [
-      {
-        name: label,
-        type: ActivityType.Listening,
-      },
-    ],
-  });
-
-  return { song, artist, album };
-}
-
 client.once('ready', () => {
   console.log(`[INFO] Logged in as ${client.user.tag}`);
   console.log(`[INFO] Monitoring activity for user ID: ${TARGET_USER_ID}`);
-  setDefaultPresence();
+  client.user.setPresence({ status: 'online' });
 });
 
 client.on('presenceUpdate', (oldPresence, newPresence) => {
@@ -98,26 +42,6 @@ client.on('presenceUpdate', (oldPresence, newPresence) => {
   const removed = oldActivities.filter((a) => !newNames.includes(a.name));
 
   const timestamp = new Date().toISOString();
-
-  // --- Music presence mirroring ---
-  const currentMusic = findMusicActivity(newActivities);
-  const previousMusic = findMusicActivity(oldActivities);
-
-  if (currentMusic) {
-    // User is (or just started) listening to music — mirror it on the bot
-    const { song, artist, album } = setMusicPresence(currentMusic);
-    console.log(
-      `[${timestamp}] [MUSIC] Now mirroring: "${song}"` +
-        (artist ? ` by ${artist}` : '') +
-        (album ? ` — ${album}` : '')
-    );
-  } else if (previousMusic && !currentMusic) {
-    // User stopped listening — revert to default presence
-    setDefaultPresence();
-    console.log(
-      `[${timestamp}] [MUSIC] Playback stopped — reverted to default presence`
-    );
-  }
 
   // --- General activity logging ---
   if (added.length === 0 && removed.length === 0) return;
